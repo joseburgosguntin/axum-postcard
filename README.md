@@ -18,8 +18,8 @@ struct CreateUser {
 async fn create_user(
     Postcard(payload): Postcard<CreateUser>
 ) {
-    todo!()
     // payload is a `CreateUser`
+    todo!()
 }
 ```
 
@@ -32,12 +32,12 @@ use axum_postcard::Postcard;
 
 #[derive(Serialize)]
 struct User {
-    id: Uuid,
+    id: u32,
     username: String,
 }
 
 async fn get_user(
-    Path(user_id) : Path<Uuid>
+    Path(user_id) : Path<u32>
 ) -> Postcard<User> {
     let user = find_user(user_id).await;
     Postcard(user)

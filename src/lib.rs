@@ -4,13 +4,11 @@ use serde::{de::DeserializeOwned, Serialize};
 // axum deps
 use async_trait::async_trait;
 use axum::{
-    body::Bytes,
+    body::{Body, Bytes},
     extract::{rejection::BytesRejection, FromRequest},
     http::{header, HeaderMap, Request, StatusCode},
     response::{IntoResponse, Response},
-    BoxError,
 };
-// use serde_json::to_vec;
 
 /// Postcard Extractor / Response.
 ///
@@ -51,11 +49,13 @@ use axum::{
 ///
 /// async fn create_user(Postcard(payload): Postcard<CreateUser>) {
 ///     // payload is a `CreateUser`
+///     todo!()
 /// }
 ///
 /// let app = Router::new().route("/users", post(create_user));
 /// # async {
-/// # axum::Server::bind(&"".parse().unwrap()).serve(app.into_make_service()).await.unwrap();
+/// # let listener = tokio::net::TcpListener::bind("0.0.0.0:3000").await.unwrap();
+/// # axum::serve(listener, app).await.unwrap();
 /// # };
 /// ```
 ///
@@ -72,27 +72,26 @@ use axum::{
 /// };
 /// use serde::Serialize;
 /// use axum_postcard::Postcard;
-/// use uuid::Uuid;
 ///
 /// #[derive(Serialize)]
 /// struct User {
-///     id: Uuid,
+///     id: u32,
 ///     username: String,
 /// }
 ///
-/// async fn get_user(Path(user_id) : Path<Uuid>) -> Postcard<User> {
+/// async fn get_user(Path(user_id) : Path<u32>) -> Postcard<User> {
 ///     let user = find_user(user_id).await;
 ///     Postcard(user)
 /// }
 ///
-/// async fn find_user(user_id: Uuid) -> User {
-///     // ...
-///     # unimplemented!()
+/// async fn find_user(user_id: u32) -> User {
+///     todo!()
 /// }
 ///
 /// let app = Router::new().route("/users/:id", get(get_user));
 /// # async {
-/// # axum::Server::bind(&"".parse().unwrap()).serve(app.into_make_service()).await.unwrap();
+/// # let listener = tokio::net::TcpListener::bind("0.0.0.0:3000").await.unwrap();
+/// # axum::serve(listener, app).await.unwrap();
 /// # };
 /// ```
 pub struct Postcard<T>(pub T);
@@ -122,17 +121,14 @@ impl IntoResponse for PostcardRejection {
 }
 
 #[async_trait]
-impl<T, S, B> FromRequest<S, B> for Postcard<T>
+impl<T, S> FromRequest<S> for Postcard<T>
 where
     T: DeserializeOwned,
-    B: axum::body::HttpBody + Send + 'static,
-    B::Data: Send,
-    B::Error: Into<BoxError>,
     S: Send + Sync,
 {
     type Rejection = PostcardRejection;
 
-    async fn from_request(req: Request<B>, state: &S) -> Result<Self, Self::Rejection> {
+    async fn from_request(req: Request<Body>, state: &S) -> Result<Self, Self::Rejection> {
         if postcard_content_type(req.headers()) {
             let bytes = Bytes::from_request(req, state).await?;
 
@@ -189,7 +185,7 @@ where
 mod tests {
     use super::*;
     use axum::{routing::post, Router};
-    use axum_test_helper::TestClient;
+    use axum_test_helpers::*;
     use serde::Deserialize;
 
     #[tokio::test]
@@ -207,7 +203,6 @@ mod tests {
             .post("/")
             .header("content-type", "application/postcard")
             .body("\x03bar")
-            .send()
             .await;
         let body = res.text().await;
 
@@ -224,7 +219,7 @@ mod tests {
         let app = Router::new().route("/", post(|input: Postcard<Input>| async { input.0.foo }));
 
         let client = TestClient::new(app);
-        let res = client.post("/").body("\x03bar").send().await;
+        let res = client.post("/").body("\x03bar").await;
 
         let status = res.status();
 
@@ -242,7 +237,6 @@ mod tests {
                 .post("/")
                 .header("content-type", content_type)
                 .body("\x02hi")
-                .send()
                 .await;
 
             res.status() == StatusCode::OK
@@ -264,7 +258,6 @@ mod tests {
             .post("/")
             .body("\x03")
             .header("content-type", "application/postcard")
-            .send()
             .await;
 
         assert_eq!(res.status(), StatusCode::BAD_REQUEST);
@@ -295,7 +288,6 @@ mod tests {
             .post("/")
             .header("content-type", "application/postcard")
             .body("\x02\x01\x04")
-            .send()
             .await;
 
         assert_eq!(res.status(), StatusCode::BAD_REQUEST);
