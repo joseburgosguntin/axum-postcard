@@ -17,8 +17,6 @@ async-trait = "0.1.72"
 mime = "0.3.17"
 thiserror = "1.0"
 bytes = "1.4"
-uuid =  { version = "1.4.1", features = [ "serde" ] }
-serde_json = "1.0"
 tokio = { version = "1.29.1", features = ["full"] }
 
 [dev-dependencies]
