@@ -13,7 +13,7 @@ use axum::{
 /// Postcard Extractor / Response.
 ///
 /// When used as an extractor, it can deserialize request bodies into some type that
-/// implements [`serde::Deserialize`]. The request will be rejected (and a [`JsonRejection`] will
+/// implements [`serde::Deserialize`]. The request will be rejected (and a [`PostcardRejection`] will
 /// be returned) if:
 ///
 /// - The request doesn't have a `Content-Type: application/postcard` (or similar) header.
@@ -22,7 +22,7 @@ use axum::{
 /// type.
 /// - Buffering the request body fails.
 ///
-/// ⚠️ Since parsing Postcard requires consuming the request body, the `Json` extractor must be
+/// ⚠️ Since parsing Postcard requires consuming the request body, the `Postcard` extractor must be
 /// *last* if there are multiple extractors in a handler.
 /// See ["the order of extractors"][order-of-extractors]
 ///
@@ -60,7 +60,7 @@ use axum::{
 /// ```
 ///
 /// When used as a response, it can serialize any type that implements [`serde::Serialize`] to
-/// `JSON`, and will automatically set `Content-Type: application/json` header.
+/// `Postcard`, and will automatically set `Content-Type: application/postcard` header.
 ///
 /// # Response example
 ///
@@ -162,10 +162,10 @@ fn postcard_content_type(headers: &HeaderMap) -> bool {
         return false;
     };
 
-    let is_json_content_type = mime.type_() == "application"
+    let is_postcard_content_type = mime.type_() == "application"
         && (mime.subtype() == "postcard" || mime.suffix().map_or(false, |name| name == "postcard"));
 
-    is_json_content_type
+    is_postcard_content_type
 }
 
 impl<T> IntoResponse for Postcard<T>
@@ -175,7 +175,7 @@ where
     fn into_response(self) -> Response {
         // TODO: maybe use 128 bytes cause serde is doing something like that
         match to_allocvec(&self.0) {
-            Ok(value) => value.into_response(),
+            Ok(value) => ([(header::CONTENT_TYPE, "application/postcard")], value).into_response(),
             Err(err) => (StatusCode::INTERNAL_SERVER_ERROR, err.to_string()).into_response(),
         }
     }
@@ -187,6 +187,7 @@ mod tests {
     use axum::{routing::post, Router};
     use axum_test_helpers::*;
     use serde::Deserialize;
+    use futures_util::StreamExt;
 
     #[tokio::test]
     async fn deserialize_body() {
@@ -280,7 +281,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn invalid_json_data() {
+    async fn invalid_postcard_data() {
         let app = Router::new().route("/", post(|_: Postcard<Foo>| async {}));
 
         let client = TestClient::new(app);
@@ -291,8 +292,22 @@ mod tests {
             .await;
 
         assert_eq!(res.status(), StatusCode::BAD_REQUEST);
-        // assert_eq!(res.status(), StatusCode::UNPROCESSABLE_ENTITY);
         let body_text = res.text().await;
         assert_eq!(body_text, "Hit the end of buffer, expected more data");
+    }
+
+    #[tokio::test]
+    async fn serialize_response() {
+        let response = Postcard("bar").into_response();
+
+        assert!(postcard_content_type(response.headers()));
+
+        let mut body = Vec::new();
+        let body_parts: Vec<_> = response.into_body().into_data_stream().collect().await;
+        for part in body_parts {
+            body.extend_from_slice(&part.unwrap());
+        }
+
+        assert_eq!(body, b"\x03bar");
     }
 }
