@@ -20,7 +20,4 @@ bytes = "1.4"
 tokio = { version = "1.29.1", features = ["full"] }
 
 [dev-dependencies]
-axum-test-helpers = "0.7"
-# required for axum-test-helpers to compile
-tower = { version = "0.4.13", features = ["make"] }
-futures-util = "0.3"
+axum-test-helpers = "0.7.6"

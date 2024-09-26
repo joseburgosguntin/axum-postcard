@@ -184,10 +184,9 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use axum::{routing::post, Router};
+    use axum::{body::to_bytes, routing::post, Router};
     use axum_test_helpers::*;
     use serde::Deserialize;
-    use futures_util::StreamExt;
 
     #[tokio::test]
     async fn deserialize_body() {
@@ -301,13 +300,8 @@ mod tests {
         let response = Postcard("bar").into_response();
 
         assert!(postcard_content_type(response.headers()));
+        let bytes = &to_bytes(response.into_body(), 4).await.unwrap()[..];
 
-        let mut body = Vec::new();
-        let body_parts: Vec<_> = response.into_body().into_data_stream().collect().await;
-        for part in body_parts {
-            body.extend_from_slice(&part.unwrap());
-        }
-
-        assert_eq!(body, b"\x03bar");
+        assert_eq!(bytes, b"\x03bar");
     }
 }
